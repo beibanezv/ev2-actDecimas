@@ -91,9 +91,10 @@ ConflictResolver` → `TipoConflicto/EstrategiaResolucion/ResolvedorConflictos`.
 4. **Medir tokens y segundos** (error #5). Cada corrida reporta mensajes,
    conflictos por tipo, rondas de negociación, llamadas y tokens del mediador
    y segundos totales. Ver `evidencia/corrida-negociacion-seed42.md`:
-   corrida real con LLM = 15 llamadas, 3.954 tokens de entrada y 2.066 de
-   salida, 32 mensajes, 5/5 conflictos resueltos; el mismo escenario sin
-   mediador corre en milisegundos con 0 tokens.
+   corrida real con LLM = 15 llamadas, 3.954 tokens de entrada y 1.998 de
+   salida, 7,9 s, 32 mensajes, 5/5 conflictos resueltos; el mismo escenario
+   sin mediador corre en milisegundos con 0 tokens. (La temperatura 0.3 del
+   mediador introduce una variación de ±10% entre corridas.)
 5. **Reproducibilidad.** `--seed` fija el `random` que usa la votación (el
    archivo base usaba `random` global, por lo que sus corridas no eran
    reproducibles). Las políticas de los agentes son deterministas por rol.
@@ -126,7 +127,7 @@ recurso y **cuánto** cuesta la decisión. La negociación es la única
 estrategia que gasta rondas y la única que puede repartir el acceso cuando
 los deadlines son asimétricos; la votación asigna según el sorteo con
 semilla, no según el mérito de cada parte. La corrida con LLM real documenta
-el costo: 8,7 s y ~6.000 tokens por corrida completa, frente a milisegundos
+el costo: 7,9 s y ~6.000 tokens por corrida completa, frente a milisegundos
 del protocolo puro.
 
 Archivos en `evidencia/`: una transcripción por estrategia
