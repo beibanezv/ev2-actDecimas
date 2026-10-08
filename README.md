@@ -1,157 +1,215 @@
-# Sistema de Colaboración Académica — actividad de décimas IL2.3
+# Equipo multi-agente que produce un entregable — actividad IL2.3
 
-Prototipo reproducible de **coordinación y resolución de conflictos entre
-múltiples agentes**, elegido como *Proyecto 4 (Sistema de Colaboración
-Académica)* de la guía pedagógica de IL2.3 «Planificación y Orquestación»
-(`Ingenieria-de-Soluciones-con-IA/RA2/IL2.3/0-guia-pedagica.md`).
+Prototipo de **coordinación y resolución de conflictos entre varios agentes**,
+elegido como *Proyecto 4 (Sistema de Colaboración Académica)* de la guía
+pedagógica de IL2.3 «Planificación y Orquestación»
+(`Ingenieria-de-Soluciones-con-IA/RA2/IL2.3/0-guia-pedagogica.md`).
 
-Cuatro agentes-estudiantes —**Coordinador, Investigador, Analista y
-Redactor**— deben producir un informe académico grupal. Para lograrlo se
-reparten las secciones, votan el tema y compiten por recursos académicos
-escasos (base de datos, sala de trabajo, revisión con el profesor). Los
-conflictos emergen del escenario (no están guionizados) y se resuelven con
-seis estrategias configurables: `prioridad`, `negociacion`, `arbitraje`,
-`votacion`, `compromiso` y `primero_en_llegada`.
+Cuatro agentes **producen un informe técnico real de un proyecto**:
 
-## Cómo ejecutar
+| Agente | Rol |
+|---|---|
+| **Coordinador** | divide el trabajo, asigna secciones por capacidad y media |
+| **Analista** | lee el proyecto objetivo (markdowns, árbol, código opcional) y extrae un brief de hechos |
+| **Redactor** | escribe el informe **usando solo el brief** (no puede alucinar) |
+| **Revisor** | verifica cada borrador contra una checklist objetiva y aprueba o rechaza |
 
-Requisitos: Python 3.11+, `langchain-groq`, `python-dotenv` y `pytest`.
-El proyecto se desarrolló con el intérprete del curso
-(`ep1-ecoturismo-agente/.venv`, Python 3.13); cualquier entorno con esos
-paquetes sirve:
+Cuando el revisor rechaza un borrador se abre un **conflicto real** entre
+Redactor y Revisor que se resuelve con una de seis estrategias configurables
+(`prioridad`, `negociacion`, `arbitraje`, `votacion`, `compromiso`,
+`primero_en_llegada`), con tope duro de 3 rondas y laudo final del árbitro.
+La salida es un informe en markdown, no una conversación.
+
+## Demo en 30 segundos
+
+El repo trae un mini-proyecto (`ejemplo-proyecto/`) para que la demo corra
+sola, sin depender de datos externos:
 
 ```bash
-pip install langchain-groq python-dotenv pytest      # o uv pip install ...
+python main.py                      # documenta ejemplo-proyecto/ con el equipo LLM real
+python main.py --llm no             # misma corrida, determinista, sin red ni clave
+```
 
-# 1) corrida completa con mediador LLM real (Groq, openai/gpt-oss-20b)
-python main.py --estrategia negociacion --seed 42
+## Requisitos y ejecución
 
-# 2) las 6 estrategias con la misma semilla → tabla comparativa
+- Python 3.11+, `langchain-groq`, `python-dotenv` y `pytest`.
+- El proyecto se desarrolló con el intérprete del curso
+  (`ep1-ecoturismo-agente/.venv`, Python 3.13); cualquier entorno con esos
+  paquetes sirve.
+- El equipo LLM usa ChatGroq (`openai/gpt-oss-20b` por defecto) y lee la clave
+  de `.env` (`GROQ_API_KEY`, `GROQ_MODEL`). Ese archivo **no se versiona**
+  (ver `.gitignore`). Sin clave, sin red o ante un error (p.ej. 429), cada rol
+  cae a su redactor determinista y la corrida se completa igual: el modo usado
+  queda registrado en las métricas.
+
+```bash
+# documenta cualquier proyecto real (por defecto solo lee .md y el árbol;
+# --codigo añade extractos de .py, con tope de caracteres por archivo)
+python main.py --proyecto ../ep1-veterinaria-agente --codigo
+
+# la misma corrida con otra estrategia de resolución del desacuerdo
+python main.py --proyecto ejemplo-proyecto --estrategia arbitraje --rondas 3
+
+# tabla comparativa de las 6 estrategias sobre el MISMO borrador (determinista)
 python main.py --comparar
 
-# 3) pruebas del protocolo (18 pruebas)
+# pruebas del protocolo (27 pruebas)
 python -m pytest tests -q
 ```
 
-> Comando exacto usado para la evidencia de este repositorio (Windows):
-> `& "..\ep1-ecoturismo-agente\.venv\Scripts\python.exe" main.py --estrategia negociacion --seed 42`
+Comando exacto usado para la evidencia de este repositorio (Windows):
 
-El mediador LLM es **opcional**: con `--llm no` la corrida es determinista y
-no consume red. La clave se lee de `.env` (`GROQ_API_KEY`, `GROQ_MODEL`);
-ese archivo no se versiona (ver `.gitignore`). Sin clave o ante un error 429
-el sistema cae al mediador determinista y la simulación sigue de pie.
+```
+& "..\ep1-ecoturismo-agente\.venv\Scripts\python.exe" main.py --proyecto ejemplo-proyecto --estrategia negociacion --seed 42
+```
 
 ## Arquitectura
 
 ```mermaid
 flowchart TD
-    A[Coordinador<br/>anuncia tarea] --> B[Fase 1: reparto de secciones]
-    B -->|2 agentes quieren redactar| C[Conflicto PRIORIDAD]
-    B --> D[Fase 2: votacion multi-opcion]
-    D -->|empate 3 temas| E[Conflicto OBJETIVO]
-    E --> F[Fase 3: recursos exclusivos]
-    F -->|base de datos / sala| G[Conflicto RECURSO]
-    G --> H[Fase 4: slot con el profesor]
-    H -->|deadlines traslapados| I[Conflicto TEMPORAL]
-    C & E & G & I --> J[ResolvedorConflictos<br/>estrategia configurable]
-    J -->|redacta propuestas| K[Mediador LLM<br/>ChatGroq gpt-oss-20b]
-    K --> L[Plan consolidado + acta + metricas]
+    A[Solicitud: documentar proyecto X] --> B[Fase 1: Coordinador divide y asigna secciones]
+    B -->|Analista y Redactor se postulan a la misma| C[Conflicto PRIORIDAD]
+    B --> D[Fase 2: Analista lee el proyecto → brief de hechos]
+    D --> E[Fase 3: Redactor escribe v1 SOLO con el brief]
+    E --> F[Fase 4: Revisor verifica contra la checklist]
+    F -->|aprobado| H[Informe final]
+    F -->|rechazado| G[Conflicto OBJETIVO redactor/revisor]
+    G -->|estrategia configurable| I[corregir todo / corregir mitad / aceptar]
+    I --> F
+    G -->|tope de 3 rondas agotado| J[Laudo del árbitro]
+    J --> H
+    C --> K[ResolvedorConflictos]
+    G --> K
+    K -->|redacta propuestas y veredictos| L[ChatGroq gpt-oss-20b]
 ```
 
 | Módulo | Rol |
 |---|---|
 | `simulacion/coordinacion.py` | adaptación de `9-multi-agent-coordination.py`: mensajes, capacidades, votación multi-opción |
 | `simulacion/conflictos.py` | adaptación de `10-conflict-resolution.py`: detección y 6 estrategias de resolución |
-| `simulacion/agentes.py` | `Estudiante`: une ambos mundos (coordinación + recursos + deadline) |
-| `simulacion/escenario.py` | las 4 fases de la tarea grupal y el plan consolidado |
-| `simulacion/mediador_llm.py` | ChatGroq: redacta propuestas de negociación y el acta (rol acotado) |
-| `main.py` | CLI: `--estrategia`, `--seed`, `--llm`, `--comparar` |
-| `tests/` | 18 pruebas del protocolo (coordinación, conflictos, escenario, mediador) |
-| `evidencia/` | transcripción y métricas por estrategia + tabla comparativa |
+| `simulacion/agentes.py` | `MiembroEquipo`: une ambos mundos (coordinación + recursos + deadline) |
+| `simulacion/escenario.py` | las 5 fases del trabajo en equipo, la checklist objetiva y las métricas |
+| `simulacion/mediador_llm.py` | ChatGroq con roles acotados: analiza, redacta, revisa, arbitra |
+| `main.py` | CLI: `--proyecto`, `--estrategia`, `--rondas`, `--codigo`, `--comparar` |
+| `ejemplo-proyecto/` | mini-proyecto autocontenido para la demo |
+| `tests/` | 27 pruebas del protocolo (coordinación, conflictos, escenario, mediador) |
+| `evidencia/` | transcripción y métricas por estrategia, comparativa e informe generado |
 
 Mapeo de nombres base → proyecto: `MessageType/CoordinatedAgent/Coordinator`
 → `TipoMensaje/AgenteCoordinado/Coordinador`; `ConflictType/ResolutionStrategy/
 ConflictResolver` → `TipoConflicto/EstrategiaResolucion/ResolvedorConflictos`.
 
+## Cómo se evitan las alucinaciones
+
+1. El **Analista** solo puede afirmar lo que aparece en el material entregado;
+   el brief se arma a partir de los archivos realmente leídos.
+2. El **Redactor** recibe únicamente el brief y tiene prohibido citar archivos
+   que no estén en él.
+3. El **Revisor** no "opina": evalúa el borrador con una **checklist
+   determinista** (las 4 secciones exigidas, mínimo de palabras por sección,
+   sin placeholders, archivos citados verificables en el material). El LLM
+   aporta motivos y correcciones puntuales, pero el veredicto
+   `aprobado/rechazado` lo fija la checklist. En la primera corrida real este
+   mecanismo detectó una cita no verificable (`biblioteca.json`, ausente del
+   material leído) y la obligó a salir del informe.
+
 ## Decisiones de diseño (y errores de la guía que se evitan)
 
-1. **No usar LLM para todo** (error #1). El reparto por capacidades y las
-   seis estrategias de resolución son Python puro y determinista. El LLM solo
-   *redacta* las propuestas de cada ronda de negociación y el acta final;
-   quién gana cada conflicto lo fija el protocolo.
-2. **Sí se justifica el multi-agente** (error #4). La actividad estudia
-   precisamente coordinación y conflictos, y los conflictos son reales:
-   dos agentes quieren redactar, dos piden la misma base de datos y dos
-   necesitan el mismo slot de revisión. No hay agentes pasándose texto en
-   línea sin propósito.
-3. **Tope duro de iteraciones** (error #6). La negociación corre como máximo
-   3 rondas (`MAX_RONDAS_NEGOCIACION`); al agotarse, arbitraje forzado. El
-   acuerdo depende de la asimetría de deadlines: urgencia simétrica cierra en
-   ronda 1, asimetría leve en ronda 2 y asimetría fuerte agota el tope.
+1. **No usar LLM para todo** (error #1). El reparto por capacidades, la
+   checklist y las seis estrategias de resolución son Python puro. Los LLM solo
+   producen contenido acotado (brief, borrador, motivos, laudo); quién gana
+   cada conflicto lo decide el protocolo.
+2. **Sí se justifica el multi-agente** (error #4). No son agentes pasándose
+   texto en línea: los roles tienen dominios distintos (leer, escribir,
+   verificar), el rechazo del revisor abre un conflicto real con términos
+   negociables y cada estrategia produce un informe *diferente* a partir del
+   mismo material.
+3. **Tope duro de iteraciones** (error #6). La revisión corre como máximo 3
+   rondas; al agotarse, el árbitro dicta resolución y el informe se consolida
+   de todas formas.
 4. **Medir tokens y segundos** (error #5). Cada corrida reporta mensajes,
-   conflictos por tipo, rondas de negociación, llamadas y tokens del mediador
-   y segundos totales. Ver `evidencia/corrida-negociacion-seed42.md`:
-   corrida real con LLM = 15 llamadas, 3.954 tokens de entrada y 1.998 de
-   salida, 7,9 s, 32 mensajes, 5/5 conflictos resueltos; el mismo escenario
-   sin mediador corre en milisegundos con 0 tokens. (La temperatura 0.3 del
-   mediador introduce una variación de ±10% entre corridas.)
-5. **Reproducibilidad.** `--seed` fija el `random` que usa la votación (el
-   archivo base usaba `random` global, por lo que sus corridas no eran
-   reproducibles). Las políticas de los agentes son deterministas por rol.
+   conflictos por tipo, rondas de revisión y de negociación, llamadas y tokens
+   del equipo LLM y segundos totales. La lectura de archivos tiene tope de
+   caracteres por archivo (`--codigo` cuesta más y es opt-in).
+5. **Reproducibilidad.** `--seed` fija el `random` del desempate por votación
+   (el archivo base usaba `random` global, por lo que sus corridas no eran
+   reproducibles). Las políticas de cada miembro son deterministas por rol.
 6. **Extensiones sobre los archivos base.** `votacion_multiple` vota entre N
    opciones y detecta empates (el base solo votaba sí/no);
-   `resolver_por_arbitraje` y `resolver_primero_en_llegar` están declarados
-   en el enum del base pero sin implementación, aquí sí funcionan con
-   criterio explícito (deadline más próximo / orden de llegada).
-7. **Robustez.** Sin clave, sin red o ante 429, el mediador cae a un redactor
-   determinista; la corrida se completa igual y el modo usado queda registrado
-   en las métricas.
+   `resolver_por_arbitraje` y `resolver_primero_en_llegar` están declarados en
+   el enum del base pero sin implementación, aquí sí funcionan con criterio
+   explícito (deadline más próximo / orden de llegada).
 
 ## Evidencia
 
-`python main.py --comparar` (misma semilla, sin mediador, para aislar el
-efecto de la estrategia):
+Corrida real con equipo LLM (`python main.py --proyecto ejemplo-proyecto
+--estrategia negociacion --seed 42`), proyecto de ejemplo:
 
-| Estrategia | `acceso_base_datos` → | `revision_con_profesor` → | Rondas neg. | Segundos |
-|---|---|---|---|---|
-| prioridad | Analista | Analista | 0 | ~0.00 |
-| negociacion | Analista | Investigador | 14 | ~0.00 |
-| arbitraje | Analista | Investigador | 0 | ~0.00 |
-| votacion | Investigador | Investigador | 0 | ~0.00 |
-| compromiso | compartido | compartido | 0 | ~0.01 |
-| primero_en_llegada | Investigador | Investigador | 0 | ~0.00 |
+| Métrica | Valor |
+|---|---|
+| Llamadas al equipo LLM | 12 (1 análisis + 3 redacciones + 3 revisiones + 5 propuestas de negociación) |
+| Tokens (entrada / salida) | 5.393 / 2.960 (8.353 en total) |
+| Mensajes intercambiados | 23 |
+| Conflictos detectados / resueltos | 3 / 3 (reparto + 2 de revisión) |
+| Rondas de revisión | 2 rechazos → **APROBADO** en el 3.er veredicto |
+| Segundos | 7,7 |
 
-Lectura: el escenario es idéntico en todas las corridas (32-33 mensajes,
-5 conflictos, 5 resueltos); lo que cambia es **a quién** se asigna cada
-recurso y **cuánto** cuesta la decisión. La negociación es la única
-estrategia que gasta rondas y la única que puede repartir el acceso cuando
-los deadlines son asimétricos; la votación asigna según el sorteo con
-semilla, no según el mérito de cada parte. La corrida con LLM real documenta
-el costo: 7,9 s y ~6.000 tokens por corrida completa, frente a milisegundos
-del protocolo puro.
+(`tokens_estimados: false`: los tokens vienen del `usage` de Groq, no de una
+estimación.) El revisor rechazó dos veces (una sección con menos de 60
+palabras, 53 en otra) y el redactor corrigió hasta aprobar: el gate de calidad
+funcionó y el informe final quedó en `evidencia/informe-ejemplo-proyecto.md`.
+El costo de una corrida completa varía con el día: entre 5 y 30 s y entre 6 y
+11 mil tokens, según cuántas rondas de corrección abra el revisor.
 
-Archivos en `evidencia/`: una transcripción por estrategia
-(`corrida-<estrategia>-seed42.md`, con métricas, reportes y acta) y la tabla
-comparativa (`comparativa-estrategias.md`).
+`python main.py --comparar` (misma semilla, sin equipo LLM, para aislar el
+efecto de la estrategia sobre el MISMO borrador):
+
+| Estrategia | Rondas revisión | Aprobado | Acciones del revisor | Conflictos | Rondas neg. |
+|---|---|---|---|---|---|
+| prioridad | 3 | no | corregir_todo ×3 | 4/4 | 0 |
+| negociacion | 3 | no | corregir_mitad ×3 | 4/4 | 7 |
+| arbitraje | 3 | no | corregir_todo ×3 | 4/4 | 0 |
+| votacion | 1 | no | aceptar | 2/2 | 0 |
+| compromiso | 3 | no | corregir_mitad ×3 | 4/4 | 0 |
+| primero_en_llegada | 1 | no | aceptar | 2/2 | 0 |
+
+Lectura: el escenario y el borrador son idénticos entre estrategias; lo que
+cambia es la acción que toma el equipo cuando el revisor rechaza. El Revisor es
+el gate de calidad (prioridad 1): las estrategias por prioridad y arbitraje le
+dan la razón y el Redactor corrige todo hasta agotar el tope; el compromiso y
+la negociación corrigen la mitad de los puntos; primero-en-llegada deja ganar
+al Redactor (llegó primero) y acepta el borrador con fallos; la votación
+depende del sorteo con semilla. Ninguna estrategia cambia los hechos: decide
+quién impone su criterio y cuántas rondas cuesta.
+
+Archivos en `evidencia/`: transcripción y métricas por estrategia
+(`corrida-<estrategia>-seed42.md`), la tabla comparativa
+(`comparativa-estrategias.md`) e **informe final generado por el equipo**
+(`informe-ejemplo-proyecto.md`).
 
 ## Pruebas
 
 ```
 $ python -m pytest tests -q
-18 passed
+27 passed
 ```
 
 Cubren: broadcast y procesamiento de mensajes, votación multi-opción con
 detección de empate, asignación por capacidad, las seis estrategias de
-resolución (incluidos arbitraje y primero-en-llegar, ausentes del base),
-reproducibilidad por semilla, tope de 3 rondas con mediador, escenario
-completo y caída a determinista del mediador sin clave.
+resolución (incluidos arbitraje y primero-en-llegada, ausentes del base),
+reproducibilidad por semilla, tope de 3 rondas con laudo del árbitro, la
+checklist (placeholders, archivos no verificables, mínimo de palabras), la
+lectura acotada del proyecto y la caída a determinista de cada rol LLM sin
+clave.
 
 ## Limitaciones conocidas
 
-- El árbitro y las prioridades los fija el escenario; un sistema real los
-  derivaría de datos.
+- Las prioridades y los deadlines los fija el escenario; un sistema real los
+  derivaría de datos (urgencia real del trabajo).
 - La votación entre agentes usa sorteo con semilla; no modela persuasión.
-- El mediador LLM acota su gasto a ≤3 llamadas por conflicto y 1 acta por
-  corrida; prompts y temperatura (`0.3`, `reasoning_effort=low`) están
-  elegidos para mantener bajo el costo.
+- El brief se construye sobre markdowns y árbol; sin `--codigo` no se leen los
+  fuentes. Los topes de lectura se eligieron para mantener el costo acotado,
+  no para capturar todo el contexto posible.
+- Un archivo citado que no exista en el disco se rechaza aunque el README lo
+  mencione como parte del diseño: la regla es conservadora a propósito
+  (mejor un reclamo falso que una alucinación aceptada).
