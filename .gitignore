@@ -1,0 +1,5 @@
+# __pycache__/
+.pytest_cache/
+*.pyc
+# credenciales (nunca subir a GitHub/AVA)
+.env
