@@ -154,6 +154,11 @@ impone su criterio y cuántas rondas cuesta. El Revisor es el gate de calidad
 compromiso y negociación corrigen la mitad; primero-en-llegada y votación
 aceptan el borrador con fallos.
 
+> Cada corrida **sobrescribe** `evidencia/corrida-<estrategia>-seed<N>.md`.
+> Los informes de `--tema` y de otros proyectos no pisan el de
+> `ejemplo-proyecto` (cada uno tiene su nombre), pero si querés conservar una
+> corrida, cópiala antes de volver a ejecutar.
+
 ## Pruebas
 
 ```
