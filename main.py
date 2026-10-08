@@ -8,6 +8,12 @@ Ejemplos::
     # apunta a cualquier proyecto real (solo lee .md salvo --codigo)
     python main.py --proyecto ../ep1-veterinaria-agente --codigo
 
+    # informe sobre un tema libre (genera material/tema-*/ con 2 notas md)
+    python main.py --tema "Etica en el uso de IA en la evaluacion universitaria"
+
+    # consola reducida: fases, veredictos y métricas (detalle en evidencia/)
+    python main.py --proyecto ejemplo-proyecto --breve
+
     # corrida determinista, sin red ni clave
     python main.py --proyecto ejemplo-proyecto --llm no
 
@@ -33,6 +39,49 @@ CARPETA_EVIDENCIA = RAIZ / "evidencia"
 
 def slug(nombre: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in nombre.lower()).strip("-") or "proyecto"
+
+
+def preparar_material_tema(tema: str, destino: Path) -> Path:
+    """Crea (o reutiliza) una carpeta con dos notas .md sobre el tema pedido.
+
+    El sistema está diseñado para no alucinar: necesita material real en
+    disco. Para poder pedir un *tema* sin escribir las notas a mano, se
+    genera un scaffold mínimo de 2 markdown (el mínimo que exige la checklist
+    de archivos citados). Si la carpeta ya tiene notas, se respetan: el
+    usuario puede editarlas y volver a correr.
+    """
+    carpeta = destino / f"tema-{slug(tema)}"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    if len(list(carpeta.glob("*.md"))) >= 2:
+        return carpeta
+    (carpeta / "README.md").write_text(
+        f"# Informe técnico: {tema}\n\n"
+        "Solicitud: redactar un informe de cuatro secciones sobre este tema, "
+        "con definiciones, estado actual, riesgos y pendientes.\n\n"
+        "## Alcance\n\n"
+        "- Público: equipo del curso ISY0101.\n"
+        "- Extensión objetivo: 4 secciones, concisas y citando estas notas.\n\n"
+        "## Preguntas guía\n\n"
+        f"1. ¿Qué es {tema} y por qué importa ahora?\n"
+        "2. ¿Qué enfoques o herramientas existen y cómo se comparan?\n"
+        "3. ¿Qué riesgos introduce y cómo se mitigan?\n"
+        "4. ¿Qué queda pendiente para los próximos meses?\n",
+        encoding="utf-8")
+    (carpeta / "notas.md").write_text(
+        f"# Notas de trabajo: {tema}\n\n"
+        "## Definición\n\n"
+        f"- {tema}: describir el concepto con una o dos frases propias.\n"
+        "- Delimitar qué queda dentro y fuera del alcance.\n\n"
+        "## Estado actual\n\n"
+        "- Prácticas o soluciones vigentes que se puedan verificar.\n"
+        "- Ejemplos concretos con nombre y fecha.\n\n"
+        "## Riesgos\n\n"
+        "- Riesgos técnicos, éticos y de adopción.\n"
+        "- Mitigaciones propuestas para cada uno.\n\n"
+        "## Pendientes\n\n"
+        "- Decisiones abiertas y próximos pasos con responsable.\n",
+        encoding="utf-8")
+    return carpeta
 
 
 def formato_metricas(m: dict) -> str:
@@ -138,6 +187,12 @@ def main() -> None:
         description="Equipo multi-agente que produce un informe técnico de un proyecto")
     parser.add_argument("--proyecto", default=str(escenario.RAIZ_EJEMPLO),
                         help="carpeta del proyecto a documentar (default: ejemplo-proyecto)")
+    parser.add_argument("--tema", default=None,
+                        help="tema libre para informar (excluyente con --proyecto); "
+                             "genera material/tema-<slug>/ con 2 notas md reutilizables")
+    parser.add_argument("--breve", action="store_true",
+                        help="consola reducida (fases, veredictos, métricas); "
+                             "la transcripción completa queda en evidencia/")
     parser.add_argument("--estrategia", default="negociacion",
                         choices=[e.value for e in EstrategiaResolucion],
                         help="cómo se resuelve el desacuerdo revisor/redactor")
@@ -153,6 +208,11 @@ def main() -> None:
     parser.add_argument("--comparar", action="store_true",
                         help="corre las 6 estrategias con la misma semilla y escribe la comparativa")
     args = parser.parse_args()
+    if args.tema and args.proyecto != str(escenario.RAIZ_EJEMPLO):
+        parser.error("--tema y --proyecto son excluyentes: elige uno")
+    BITACORA.breve = args.breve
+    ruta = (preparar_material_tema(args.tema, RAIZ / "material")
+            if args.tema else args.proyecto)
 
     mediador = MediadorLLM(modelo=args.modelo, activo=args.llm != "no")
     if args.llm == "no":
@@ -166,7 +226,7 @@ def main() -> None:
         filas: list[dict] = []
         for e in EstrategiaResolucion:
             resultado = escenario.ejecutar(
-                args.proyecto, e, args.semilla, mediador=None,
+                ruta, e, args.semilla, mediador=None,
                 max_rondas=min(args.rondas, 3), incluir_codigo=False)
             transcripcion = BITACORA.volcado()
             BITACORA.limpiar()
@@ -184,7 +244,7 @@ def main() -> None:
 
     estrategia = EstrategiaResolucion(args.estrategia)
     resultado = escenario.ejecutar(
-        args.proyecto, estrategia, args.semilla, mediador,
+        ruta, estrategia, args.semilla, mediador,
         max_rondas=min(args.rondas, 3), incluir_codigo=args.codigo)
     transcripcion = BITACORA.volcado()
     BITACORA.log("")
@@ -201,6 +261,12 @@ def main() -> None:
         documento_corrida(
             f"Corrida — estrategia {estrategia.value} · proyecto {m['proyecto']} · semilla {args.semilla}",
             resultado, transcripcion, ahora))
+    if args.breve:  # una línea con lo esencial (el detalle ya quedó en el archivo)
+        print(f"  conflictos {m['conflictos_resueltos']}/{m['conflictos_detectados']}"
+              f" · rondas de revisión {m['rondas_revision']}"
+              f" · tokens {m['tokens_mediador_entrada']}+{m['tokens_mediador_salida']}"
+              f" · {m['segundos']} s"
+              f" · aprobado={'sí' if m['aprobado'] else 'no'}")
     BITACORA.log(f"\n✓ Informe escrito en {ruta_informe}")
     BITACORA.log(f"✓ Evidencia escrita en {ruta_corrida}")
 

@@ -50,10 +50,18 @@ python main.py --proyecto ../ep1-veterinaria-agente --codigo
 # la misma corrida con otra estrategia de resolución del desacuerdo
 python main.py --proyecto ejemplo-proyecto --estrategia arbitraje --rondas 3
 
+# informe sobre un tema libre: crea material/tema-<slug>/ con 2 notas md
+# (edítalas y vuelve a correr; el contenido de esas notas manda)
+python main.py --tema "Etica en el uso de IA en la evaluacion universitaria"
+
+# consola reducida: fases, veredictos y métricas (21 líneas en vez de 100+);
+# la transcripción completa sigue íntegra en evidencia/corrida-*.md
+python main.py --proyecto ejemplo-proyecto --breve
+
 # tabla comparativa de las 6 estrategias sobre el MISMO borrador (determinista)
 python main.py --comparar
 
-# pruebas del protocolo (27 pruebas)
+# pruebas del protocolo (30 pruebas)
 python -m pytest tests -q
 ```
 
@@ -90,9 +98,10 @@ flowchart TD
 | `simulacion/agentes.py` | `MiembroEquipo`: une ambos mundos (coordinación + recursos + deadline) |
 | `simulacion/escenario.py` | las 5 fases del trabajo en equipo, la checklist objetiva y las métricas |
 | `simulacion/mediador_llm.py` | ChatGroq con roles acotados: analiza, redacta, revisa, arbitra |
-| `main.py` | CLI: `--proyecto`, `--estrategia`, `--rondas`, `--codigo`, `--comparar` |
+| `main.py` | CLI: `--proyecto`, `--tema`, `--estrategia`, `--rondas`, `--breve`, `--codigo`, `--comparar` |
 | `ejemplo-proyecto/` | mini-proyecto autocontenido para la demo |
-| `tests/` | 27 pruebas del protocolo (coordinación, conflictos, escenario, mediador) |
+| `material/` | carpetas `tema-<slug>/` que genera `--tema` (notas editables) |
+| `tests/` | 30 pruebas del protocolo (coordinación, conflictos, escenario, mediador, CLI) |
 | `evidencia/` | transcripción y métricas por estrategia, comparativa e informe generado |
 
 Mapeo de nombres base → proyecto: `MessageType/CoordinatedAgent/Coordinator`
@@ -161,6 +170,14 @@ funcionó y el informe final quedó en `evidencia/informe-ejemplo-proyecto.md`.
 El costo de una corrida completa varía con el día: entre 5 y 30 s y entre 6 y
 11 mil tokens, según cuántas rondas de corrección abra el revisor.
 
+Una segunda corrida real, ahora sobre un **tema libre**
+(`--tema "Etica en el uso de IA en la evaluacion universitaria"`, estrategia
+arbitraje, semilla 7), quedó en `evidencia/corrida-arbitraje-seed7.md`: el
+Revisor rechazó dos veces por secciones bajo el mínimo de palabras y aprobó en
+la ronda 3; 2 chats de arbitraje, 5.778 tokens, 5,1 s. El informe resultante
+está en `evidencia/informe-tema-etica-en-el-uso-de-ia-en-la-evaluacion-universitaria.md`.
+Con `--breve` esa corrida ocupa 21 líneas de consola en lugar de más de 100.
+
 `python main.py --comparar` (misma semilla, sin equipo LLM, para aislar el
 efecto de la estrategia sobre el MISMO borrador):
 
@@ -191,7 +208,7 @@ Archivos en `evidencia/`: transcripción y métricas por estrategia
 
 ```
 $ python -m pytest tests -q
-27 passed
+30 passed
 ```
 
 Cubren: broadcast y procesamiento de mensajes, votación multi-opción con
@@ -199,8 +216,9 @@ detección de empate, asignación por capacidad, las seis estrategias de
 resolución (incluidos arbitraje y primero-en-llegada, ausentes del base),
 reproducibilidad por semilla, tope de 3 rondas con laudo del árbitro, la
 checklist (placeholders, archivos no verificables, mínimo de palabras), la
-lectura acotada del proyecto y la caída a determinista de cada rol LLM sin
-clave.
+lectura acotada del proyecto, la caída a determinista de cada rol LLM sin
+clave, y el CLI nuevo: el scaffold de `--tema` (crea dos notas y respeta las
+editadas) y el filtro de `--breve` (consola esencial, registro completo).
 
 ## Limitaciones conocidas
 
